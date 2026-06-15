@@ -132,7 +132,7 @@ Bat-файл автоматически определяет сетевые ин
 
 Если вы хотите использовать другую стратегию запрета (ALT1, ALT2 и т.д.) с WARP:
 
-Готовый пример: [`examples/general (ALT11) + WARP.bat`](examples/general%20%28ALT11%29%20%2B%20WARP.bat)
+Готовый пример: [`examples/general (ALT11) + WARP.bat`](examples/general%20%28ALT11%29%20%2B%20WARP.bat) (на основе [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube))
 
 **Шаг 1:** Добавьте этот код после `set "LISTS=%~dp0lists\"` и перед `cd /d %BIN%`:
 
