@@ -24,6 +24,7 @@ vendor/
 .vscode/
 .idea/
 opencode.json
+AGENTS.md
 
 # OS
 Thumbs.db
