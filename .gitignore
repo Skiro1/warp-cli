@@ -1,0 +1,30 @@
+# Binaries
+awarp.exe
+*.exe
+
+# Profiles (contain private keys)
+profiles/
+
+# Tunnel state
+tunnel.state
+
+# Wintun DLL (distribute separately or via releases)
+wintun.dll
+
+# Go
+*.test
+*.out
+vendor/
+
+# Backup files
+*.bak
+*.minimal
+
+# IDE / Tools
+.vscode/
+.idea/
+opencode.json
+
+# OS
+Thumbs.db
+Desktop.ini
