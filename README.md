@@ -1,28 +1,30 @@
 # awarp
 
-CLI tool for creating a **Cloudflare WARP VPN tunnel** via **AmneziaWG** (obfuscated WireGuard fork) on Windows.
+CLI-утилита для создания **Cloudflare WARP VPN-тоннеля** через **AmneziaWG** (обфусцированный форк WireGuard) на Windows.
 
-## Features
+**English:** [README-en.md](README-en.md)
 
-- Cloudflare WARP registration and key management
-- AmneziaWG tunnel with obfuscation parameters (jc, jmin, jmax, s1-s4, h1-h4, i1-i5)
+## Возможности
+
+- Регистрация в Cloudflare WARP и управление ключами
+- AmneziaWG-тоннель с параметрами обфускации (jc, jmin, jmax, s1-s4, h1-h4, i1-i5)
 - WFP firewall (kill switch)
-- Endpoint scanner for finding the fastest WARP server
-- Integration with Zapret (winws) via `--wf-iface` binding
+- Сканер эндпоинтов для поиска самого быстрого сервера WARP
+- Интеграция с Запретом (winws) через привязку `--wf-iface`
 
-## Requirements
+## Требования
 
 - Windows 10/11
-- Administrator privileges (for `awarp up`)
-- `wintun.dll` in the same directory as the binary
+- Права администратора (для `awarp up`)
+- `wintun.dll` рядом с бинарником
 
-## Build
+## Сборка
 
 ```cmd
 go build -o awarp.exe .
 ```
 
-## Usage
+## Использование
 
 ```
 awarp register --profile <name> [--license KEY] [--set-awg KEY=VAL ...] [--sni DOMAIN]
@@ -37,100 +39,100 @@ awarp config delete --profile <name>
 awarp help
 ```
 
-### Examples
+### Примеры
 
 ```cmd
-:: Register and connect
+:: Регистрация и подключение
 awarp register
 awarp up
 
-:: Scan for fastest endpoint
+:: Сканирование быстрого эндпоинта
 awarp scan
 
-:: Change endpoint
+:: Смена эндпоинта
 awarp config set --endpoint 162.159.192.179:2408
 
-:: Reconnect with new endpoint
+:: Переподключение с новым эндпоинтом
 awarp down && awarp up
 
-:: Use with Zapret (winws)
+:: Использование с Запретом (winws)
 awarp up
 zapret-warp.bat
 ```
 
-## AWG Parameters
+## Параметры AWG
 
-| Param | Description |
-|-------|-------------|
-| `jc` | Junk packet count |
-| `jmin`, `jmax` | Junk packet size range |
-| `s1`-`s4` | Message padding |
-| `h1`-`h4` | Message headers |
-| `i1`-`i5` | Custom signature packets |
+| Параметр | Описание |
+|----------|----------|
+| `jc` | Количество junk-пакетов |
+| `jmin`, `jmax` | Диапазон размеров junk-пакетов |
+| `s1`-`s4` | Заполнение сообщений |
+| `h1`-`h4` | Заголовки сообщений |
+| `i1`-`i5` | Пользовательские пакеты подписи |
 
-## Endpoints
+## Эндпоинты
 
-Default: `engage.cloudflareclient.com:2408`
+Дефолтный: `engage.cloudflareclient.com:2408`
 
-WARP WireGuard subnets:
+Подсети WARP WireGuard:
 - `162.159.192.0/24`
 - `162.159.193.0/24`
 
-Port: UDP 2408 (backup: 500, 1701, 4500)
+Порт: UDP 2408 (резервные: 500, 1701, 4500)
 
-## Zapret (winws) Integration
+## Интеграция с Запретом (winws)
 
-### Problem
+### Проблема
 
-When running winws (GoodbyeDPI/Запрет) together with WARP, browsers show "No internet" and websites don't load. This happens because:
+При запуске winws (GoodbyeDPI/Запрет) вместе с WARP браузеры показывают "Нет интернета" и сайты не грузятся. Причина:
 
-1. WinDivert (used by winws) intercepts packets on ALL network interfaces
-2. WARP creates a TUN interface (`warp0`) that handles all traffic
-3. Windows NCSI (Network Connectivity Status Indicator) sends HTTP probes through the TUN
-4. WinDivert mangles these probes → Windows thinks there's no internet
-5. curl and Telegram work because they use their own network stack (Winsock)
+1. WinDivert (используется winws) перехватывает пакеты на ВСЕХ сетевых интерфейсах
+2. WARP создаёт TUN-интерфейс (`warp0`), который обрабатывает весь трафик
+3. Windows NCSI отправляет HTTP-запросы через TUN
+4. WinDivert ломает эти запросы → Windows думает, что интернета нет
+5. curl и Telegram работают, потому что используют свой стек (Winsock)
 
-### Symptoms
+### Симптомы
 
-- `curl https://youtube.com` works
-- Telegram works
-- Browser shows "No internet", YouTube doesn't load
-- winws + WARP = browser completely broken
+- `curl https://youtube.com` работает
+- Telegram работает
+- Браузер показывает "Нет интернета", YouTube не грузится
+- winws + WARP = браузер полностью не работает
 
-### Solution
+### Решение
 
-Use `--wf-iface=<physical_interface_index>` to bind WinDivert only to the physical network interface, excluding the TUN interface.
+Использовать `--wf-iface=<индекс_физического_интерфейса>` для привязки WinDivert только к физическому сетевому интерфейсу, исключая TUN.
 
-### Quick Start
+### Быстрый старт
 
-1. Copy `zapret-warp-alt-chrome.bat` to your zapret directory (e.g., `D:\zapret\`)
-2. Start WARP:
+1. Скопируйте `zapret-warp-alt-chrome.bat` в директорию запрета (например, `D:\zapret\`)
+2. Запустите WARP:
    ```cmd
    awarp up
    ```
-3. Run zapret (in a separate terminal):
+3. Запустите запрет (в отдельном терминале):
    ```cmd
    D:\zapret\zapret-warp-alt-chrome.bat
    ```
-4. To stop:
+4. Остановка:
    ```cmd
    awarp down
    taskkill /F /IM winws.exe
    ```
 
-### How it works
+### Как это работает
 
-The bat file auto-detects network interfaces:
-1. Finds TUN interface index (`warp0`) via `netsh int ip show interfaces`
-2. Finds physical interface index (first connected non-TUN interface)
-3. Adds `--wf-iface=<physical_index>` to winws arguments
-4. WinDivert captures packets ONLY on the physical interface, ignoring TUN
+Bat-файл автоматически определяет сетевые интерфейсы:
+1. Находит индекс TUN-интерфейса (`warp0`) через `netsh int ip show interfaces`
+2. Находит индекс физического интерфейса (первый подключённый не-TUN интерфейс)
+3. Добавляет `--wf-iface=<индекс_физического>` к аргументам winws
+4. WinDivert захватывает пакеты ТОЛЬКО на физическом интерфейсе, игнорируя TUN
 
-### Manual Fix for Other bat files
+### Ручное исправление других bat-файлов
 
-If you want to use a different zapret strategy (ALT1, ALT2, etc.) with WARP:
+Если вы хотите использовать другую стратегию запрета (ALT1, ALT2 и т.д.) с WARP:
 
-**Step 1:** Add this code after `set "LISTS=%~dp0lists\"` and before `cd /d %BIN%`:
+**Шаг 1:** Добавьте этот код после `set "LISTS=%~dp0lists\"` и перед `cd /d %BIN%`:
 
 ```bat
 setlocal enabledelayedexpansion
@@ -142,24 +144,24 @@ set "IFACE_FILTER="
 if defined PHY_IDX set "IFACE_FILTER=--wf-iface=!PHY_IDX!"
 ```
 
-**Step 2:** Add `%IFACE_FILTER%` before `--wf-tcp` in the winws command:
+**Шаг 2:** Добавьте `%IFACE_FILTER%` перед `--wf-tcp` в команде winws:
 
 ```bat
-:: Before (broken with WARP):
+:: До (ломается с WARP):
 start "zapret: %~n0" /min "%BIN%winws.exe" --wf-tcp=80,443,...
 
-:: After (works with WARP):
+:: После (работает с WARP):
 start "zapret: %~n0" /min "%BIN%winws.exe" %IFACE_FILTER% --wf-tcp=80,443,...
 ```
 
-### Troubleshooting
+### Траблшутинг
 
-If it still doesn't work:
-1. Check that winws is running: `tasklist | find winws`
-2. Check physical interface index: `netsh int ip show interfaces`
-3. Verify `--wf-iface` is in the winws command line
-4. Try running winws manually (not via bat) to see error messages
+Если всё ещё не работает:
+1. Проверьте, что winws запущен: `tasklist | find winws`
+2. Проверьте индекс физического интерфейса: `netsh int ip show interfaces`
+3. Убедитесь, что `--wf-iface` есть в командной строке winws
+4. Попробуйте запустить winws вручную (не через bat), чтобы увидеть сообщения об ошибках
 
-## License
+## Лицензия
 
 MIT
