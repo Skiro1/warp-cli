@@ -78,6 +78,46 @@ WARP WireGuard subnets:
 
 Port: UDP 2408 (backup: 500, 1701, 4500)
 
+## Zapret (winws) Integration
+
+WinDivert (winws) intercepts packets from the TUN interface, causing browsers to show "No internet" because NCSI packets get mangled.
+
+### Solution
+
+Use `--wf-iface=<physical_interface_index>` to bind WinDivert only to the physical interface, excluding TUN.
+
+### Usage
+
+1. Copy `zapret-warp-alt-chrome.bat` to your zapret directory
+2. Start WARP: `awarp up`
+3. Run zapret: `zapret-warp-alt-chrome.bat`
+
+### How it works
+
+The bat file auto-detects:
+- TUN interface index (`warp0`)
+- Physical interface index (first connected non-TUN interface)
+- Adds `--wf-iface=<physical_index>` to winws arguments
+
+### Manual fix for other bat files
+
+Add before the `start` command:
+
+```bat
+set "PHY_IDX="
+for /f "skip=1 tokens=1" %%a in ('netsh int ip show interfaces 2^>nul ^| findstr /i "connected"') do (
+    if not defined PHY_IDX set "PHY_IDX=%%a"
+)
+set "IFACE_FILTER="
+if defined PHY_IDX set "IFACE_FILTER=--wf-iface=!PHY_IDX!"
+```
+
+Then add `%IFACE_FILTER%` before `--wf-tcp` in the winws command:
+
+```bat
+start "zapret: %~n0" /min "%BIN%winws.exe" %IFACE_FILTER% --wf-tcp=80,443,443,...
+```
+
 ## License
 
 MIT
