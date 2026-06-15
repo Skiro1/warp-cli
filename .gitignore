@@ -25,6 +25,7 @@ vendor/
 .idea/
 opencode.json
 AGENTS.md
+zapret-warp-alt-chrome.bat
 
 # OS
 Thumbs.db
