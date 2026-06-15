@@ -104,6 +104,7 @@ The bat file auto-detects:
 Add before the `start` command:
 
 ```bat
+setlocal enabledelayedexpansion
 set "PHY_IDX="
 for /f "skip=1 tokens=1" %%a in ('netsh int ip show interfaces 2^>nul ^| findstr /i "connected"') do (
     if not defined PHY_IDX set "PHY_IDX=%%a"
