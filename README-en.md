@@ -132,6 +132,8 @@ The bat file auto-detects network interfaces:
 
 If you want to use a different zapret strategy (ALT1, ALT2, etc.) with WARP:
 
+Ready-made example: [`examples/general (ALT11) + WARP.bat`](examples/general%20%28ALT11%29%20%2B%20WARP.bat)
+
 **Step 1:** Add this code after `set "LISTS=%~dp0lists\"` and before `cd /d %BIN%`:
 
 ```bat
