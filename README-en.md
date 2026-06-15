@@ -24,6 +24,15 @@ CLI tool for creating a **Cloudflare WARP VPN tunnel** via **AmneziaWG** (obfusc
 go build -o awarp.exe .
 ```
 
+## wintun.dll
+
+The `wintun.dll` library is required for TUN interface creation. Download it from:
+
+- **Official site:** https://www.wintun.net/
+- **GitHub:** https://github.com/WireGuard/wintun
+
+Place `wintun.dll` in the same directory as `awarp.exe`.
+
 ## Usage
 
 ```

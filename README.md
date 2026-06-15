@@ -24,6 +24,15 @@ CLI-утилита для создания **Cloudflare WARP VPN-тоннеля*
 go build -o awarp.exe .
 ```
 
+## wintun.dll
+
+Для создания TUN-интерфейса требуется библиотека `wintun.dll`. Скачать:
+
+- **Официальный сайт:** https://www.wintun.net/
+- **GitHub:** https://github.com/WireGuard/wintun
+
+Поместите `wintun.dll` в ту же директорию, где лежит `awarp.exe`.
+
 ## Использование
 
 ```
