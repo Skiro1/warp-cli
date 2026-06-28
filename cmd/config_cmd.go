@@ -167,6 +167,7 @@ NOTE:  'up' command requires Administrator privileges.
 EXAMPLES:
   awarp register --profile mywarp
   awarp register --profile mywarp --license XXXXXX
+  awarp register --profile mywarp --auto           # register + scan best endpoint
   awarp up --profile mywarp
   awarp scan
   awarp config set --profile mywarp --endpoint 162.159.192.179:2408

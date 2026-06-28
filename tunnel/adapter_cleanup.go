@@ -4,7 +4,7 @@ package tunnel
 
 import (
 	"fmt"
-	"net"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -21,8 +21,8 @@ var (
 )
 
 const (
-	digcfPresent       = 0x02
-	spdrpFriendlyName  = 0x0C
+	spdrpFriendlyName = 0x0C
+	digcfAllClasses   = 0x04
 )
 
 type devInfoData struct {
@@ -30,13 +30,6 @@ type devInfoData struct {
 	ClassGUID [16]byte
 	DevInst   uint32
 	Reserved  uintptr
-}
-
-var guidDevclassNet = windows.GUID{
-	Data1: 0x4D36E972,
-	Data2: 0xE325,
-	Data3: 0x11CE,
-	Data4: [8]byte{0xBF, 0xC1, 0x08, 0x00, 0x2B, 0xE1, 0x03, 0x18},
 }
 
 func setupDiGetClassDevs(classGuid *windows.GUID, flags uint32) (uintptr, error) {
@@ -142,33 +135,8 @@ func removeDevice(devInfoSet uintptr, d *devInfoData, name string) {
 	}
 }
 
-func getActiveTunnelIP() string {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return ""
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		addrs, _ := iface.Addrs()
-		for _, addr := range addrs {
-			ip, _, _ := net.ParseCIDR(addr.String())
-			if ip != nil && ip.To4() != nil {
-				ipStr := ip.String()
-				if len(ipStr) >= 9 && ipStr[:9] == "172.16.0." {
-					return ipStr
-				}
-			}
-		}
-	}
-	return ""
-}
-
 func cleanupOldAdaptersViaSetupDi() {
-	activeIP := getActiveTunnelIP()
-
-	devInfoSet, err := setupDiGetClassDevs(&guidDevclassNet, digcfPresent)
+	devInfoSet, err := setupDiGetClassDevs(nil, digcfAllClasses)
 	if err != nil {
 		return
 	}
@@ -180,16 +148,19 @@ func cleanupOldAdaptersViaSetupDi() {
 			break
 		}
 
+		// Check by device instance ID (works for phantom/non-present devices too)
+		instanceID := setupDiGetDeviceInstanceId(devInfoSet, d)
+		if strings.HasPrefix(instanceID, "WINTUN\\") {
+			removeDevice(devInfoSet, d, instanceID)
+			continue
+		}
+
+		// Check by friendly name (works for present devices)
 		name := setupDiGetDeviceRegistryProperty(devInfoSet, d, spdrpFriendlyName)
-		if name != "Wintun Userspace Tunnel" && name != "Wintun Userspace Tunnel #2" && name != "WireGuard Tunnel" {
+		if strings.HasPrefix(name, "Wintun") || name == "WireGuard Tunnel" {
+			removeDevice(devInfoSet, d, name)
 			continue
 		}
-
-		if activeIP != "" && name == "WireGuard Tunnel" {
-			continue
-		}
-
-		removeDevice(devInfoSet, d, name)
 	}
 }
 

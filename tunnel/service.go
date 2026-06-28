@@ -56,6 +56,16 @@ func (s *warpService) Execute(args []string, r <-chan svc.ChangeRequest, changes
 
 	cleanupOldAdapters()
 
+	// Use a static GUID so Wintun reuses the same PnP device instance
+	// instead of creating a random one (which increments the #N suffix).
+	staticGUID := &windows.GUID{
+		Data1: 0xe9b74b6e,
+		Data2: 0xb7b6,
+		Data3: 0x4c3a,
+		Data4: [8]byte{0x8d, 0x2e, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc},
+	}
+	tun.WintunStaticRequestedGUID = staticGUID
+
 	// Step 1: Create TUN adapter as SYSTEM
 	wt, err := tun.CreateTUN(cfg.Intf, 1280)
 	if err != nil {
@@ -190,7 +200,9 @@ cleanup:
 	log.Println("Cleaning up...")
 	firewall.DisableFirewall()
 	uapi.Close()
+
 	wt.Close()
+
 	log.Println("Stopped")
 	return false, 0
 }

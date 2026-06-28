@@ -9,10 +9,15 @@ import (
 	"warp-cli/warp"
 )
 
-func Register(profileName, license string, awgArgs []string, sni string) error {
+func Register(profileName, license string, awgArgs []string, sni string, auto bool) error {
 	existing, _ := config.LoadProfile(profileName)
 	if existing != nil && existing.PrivateKey != "" {
-		return fmt.Errorf("profile %q already exists. Use a different name or delete it first", profileName)
+		if !auto {
+			return fmt.Errorf("profile %q already exists. Use a different name, delete it first, or use --auto to re-optimize the endpoint", profileName)
+		}
+		fmt.Printf("Profile %q already exists. Skipping registration, optimizing endpoint...\n", profileName)
+		fmt.Println()
+		return ApplyBestEndpoint(profileName)
 	}
 
 	wc := warp.NewClient()
@@ -106,6 +111,16 @@ func Register(profileName, license string, awgArgs []string, sni string) error {
 	}
 	fmt.Println()
 	fmt.Println("Run: awarp up --profile", profileName)
+
+	if auto {
+		fmt.Println()
+		fmt.Println("Auto-optimizing endpoint...")
+		fmt.Println()
+		if err := ApplyBestEndpoint(profileName); err != nil {
+			fmt.Printf("Warning: endpoint optimization failed: %v\n", err)
+			fmt.Printf("You can still use the default endpoint or run 'awarp scan' manually.\n")
+		}
+	}
 
 	return nil
 }

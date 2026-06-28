@@ -38,25 +38,25 @@ func main() {
 		cmd.Help()
 
 	case "register":
-		profile, license, awgArgs, sni, _ := parseFlags(args)
-		if err := cmd.Register(profile, license, awgArgs, sni); err != nil {
+		profile, license, awgArgs, sni, _, _, auto := parseFlags(args)
+		if err := cmd.Register(profile, license, awgArgs, sni, auto); err != nil {
 			errExit(err)
 		}
 
 	case "up":
-		profile, _, _, _, _ := parseFlags(args)
+		profile, _, _, _, _, _, _ := parseFlags(args)
 		if err := cmd.Up(profile); err != nil {
 			errExit(err)
 		}
 
 	case "down":
-		profile, _, _, _, _ := parseFlags(args)
+		profile, _, _, _, _, _, _ := parseFlags(args)
 		if err := cmd.Down(profile); err != nil {
 			errExit(err)
 		}
 
 	case "status":
-		profile, _, _, _, _ := parseFlags(args)
+		profile, _, _, _, _, _, _ := parseFlags(args)
 		if err := cmd.Status(profile); err != nil {
 			errExit(err)
 		}
@@ -65,7 +65,8 @@ func main() {
 		handleConfig(args)
 
 	case "scan":
-		if err := cmd.ScanEndpoints(); err != nil {
+		_, _, _, _, _, community, _ := parseFlags(args)
+		if err := cmd.ScanEndpoints(community); err != nil {
 			errExit(err)
 		}
 
@@ -86,12 +87,12 @@ func handleConfig(args []string) {
 
 	switch sub {
 	case "show":
-		profile, _, _, _, _ := parseFlags(args)
+		profile, _, _, _, _, _, _ := parseFlags(args)
 		if err := cmd.ConfigShow(profile); err != nil {
 			errExit(err)
 		}
 	case "set":
-		profile, _, awgArgs, _, endpoint := parseFlags(args)
+		profile, _, awgArgs, _, endpoint, _, _ := parseFlags(args)
 		if err := cmd.ConfigSet(profile, awgArgs, endpoint); err != nil {
 			errExit(err)
 		}
@@ -100,7 +101,7 @@ func handleConfig(args []string) {
 			errExit(err)
 		}
 	case "delete":
-		profile, _, _, _, _ := parseFlags(args)
+		profile, _, _, _, _, _, _ := parseFlags(args)
 		if err := cmd.ConfigDelete(profile); err != nil {
 			errExit(err)
 		}
@@ -110,7 +111,7 @@ func handleConfig(args []string) {
 	}
 }
 
-func parseFlags(args []string) (profile string, license string, awgArgs []string, sni string, endpoint string) {
+func parseFlags(args []string) (profile string, license string, awgArgs []string, sni string, endpoint string, community bool, auto bool) {
 	profile = "warp"
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -139,6 +140,10 @@ func parseFlags(args []string) (profile string, license string, awgArgs []string
 				i++
 				endpoint = args[i]
 			}
+		case "--community":
+			community = true
+		case "--auto":
+			auto = true
 		}
 	}
 	return
