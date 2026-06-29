@@ -721,7 +721,10 @@ func udpProbeRegistered(ip string, port int, clientPrivB64, serverPubB64 string)
 	return n >= 4
 }
 
-// udpProbeAWG sends an AmneziaWG-obfuscated WireGuard handshake initiation.
+// udpProbeAWG sends warp-plus junk noise + plain WireGuard handshake initiation.
+// The junk packets (20-50 random, 80-150ms apart) confuse DPI before the real
+// handshake. This is the approach used by warp-plus and works where plain WG
+// is blocked by DPI (Iran, UAE, etc.).
 func udpProbeAWG(ip string, port int, clientPrivB64, serverPubB64 string, awgCfg config.AWGConfig) bool {
 	rip := net.ParseIP(ip)
 	if rip == nil || rip.To4() == nil {
@@ -731,10 +734,7 @@ func udpProbeAWG(ip string, port int, clientPrivB64, serverPubB64 string, awgCfg
 	if err != nil {
 		return false
 	}
-	pkts, err := warp.BuildAWGPackets(wgInit, awgCfg)
-	if err != nil {
-		return false
-	}
+	pkts := warp.BuildJunkPackets(wgInit, awgCfg.S2)
 	addr := &net.UDPAddr{IP: rip, Port: port}
 	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
@@ -748,11 +748,9 @@ func udpProbeAWG(ip string, port int, clientPrivB64, serverPubB64 string, awgCfg
 		}
 		time.Sleep(time.Duration(80+randInt(0, 70)) * time.Millisecond)
 	}
-	for _, pkt := range pkts.Sequence {
-		conn.SetWriteDeadline(time.Now().Add(scanProbeTimeout))
-		if _, err := conn.Write(pkt); err != nil {
-			return false
-		}
+	conn.SetWriteDeadline(time.Now().Add(scanProbeTimeout))
+	if _, err := conn.Write(pkts.Payload); err != nil {
+		return false
 	}
 	deadline := time.Now().Add(scanProbeTimeout)
 	for time.Now().Before(deadline) {

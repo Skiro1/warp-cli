@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"warp-cli/config"
 )
 
 // ParseAWGTags parses AWG <tag> format and returns assembled bytes.
@@ -100,18 +98,17 @@ func ParseAWGTags(s string) ([]byte, error) {
 	return result, nil
 }
 
-// AWGPackets holds the complete AWG packet sequence for a scanner probe.
+// AWGPackets holds junk noise + final payload for a scanner probe.
 type AWGPackets struct {
-	Junk     [][]byte // warp-plus junk (send with delays)
-	Sequence [][]byte // AWG sequence (I1, Jc junk, I2-I5, WG Init)
+	Junk    [][]byte // warp-plus junk (send with delays)
+	Payload []byte   // final payload: plain WG Init + optional padding
 }
 
-// BuildAWGPackets constructs the AWG-wrapped initiation packet sequence.
-// Sequence:
-//
-//	Junk: [random×20-50]   ← warp-plus style, send with 80-150ms delays
-//	Seq:  [S1][I1][Jc×random][I2][I3][I4][I5][S2+WG Init]
-func BuildAWGPackets(wgInit []byte, awg config.AWGConfig) (*AWGPackets, error) {
+// BuildJunkPackets constructs warp-plus style junk noise + plain WireGuard initiation.
+// This is the correct approach for Cloudflare WARP scanning: random noise
+// confuses DPI before the real handshake, without AWG frames (which
+// Cloudflare servers don't understand).
+func BuildJunkPackets(wgInit []byte, s2Padding int) *AWGPackets {
 	p := &AWGPackets{}
 
 	// warp-plus junk (20-50 random packets)
@@ -123,58 +120,14 @@ func BuildAWGPackets(wgInit []byte, awg config.AWGConfig) (*AWGPackets, error) {
 		p.Junk = append(p.Junk, pkt)
 	}
 
-	// S1 padding
-	if awg.S1 > 0 {
-		pkt := make([]byte, awg.S1)
-		rand.Read(pkt)
-		p.Sequence = append(p.Sequence, pkt)
+	// Plain WG Init with optional S2 padding
+	p.Payload = make([]byte, s2Padding+len(wgInit))
+	if s2Padding > 0 {
+		rand.Read(p.Payload[:s2Padding])
 	}
+	copy(p.Payload[s2Padding:], wgInit)
 
-	// I1
-	if awg.I1 != "" {
-		i1, err := ParseAWGTags(awg.I1)
-		if err != nil {
-			return nil, fmt.Errorf("parse I1: %w", err)
-		}
-		p.Sequence = append(p.Sequence, i1)
-	}
-
-	// Jc junk frames
-	if awg.Jc > 0 {
-		for i := 0; i < awg.Jc; i++ {
-			size := awg.Jmin
-			if awg.Jmax > awg.Jmin {
-				size += int(randomInt64(0, int64(awg.Jmax-awg.Jmin)))
-			}
-			if size < 1 {
-				size = 1
-			}
-			pkt := make([]byte, size)
-			rand.Read(pkt)
-			p.Sequence = append(p.Sequence, pkt)
-		}
-	}
-
-	// I2-I5
-	for _, tag := range []string{awg.I2, awg.I3, awg.I4, awg.I5} {
-		if tag != "" {
-			frame, err := ParseAWGTags(tag)
-			if err != nil {
-				return nil, fmt.Errorf("parse frame: %w", err)
-			}
-			p.Sequence = append(p.Sequence, frame)
-		}
-	}
-
-	// S2 padding + WG Init in one packet
-	last := make([]byte, awg.S2+len(wgInit))
-	if awg.S2 > 0 {
-		rand.Read(last[:awg.S2])
-	}
-	copy(last[awg.S2:], wgInit)
-	p.Sequence = append(p.Sequence, last)
-
-	return p, nil
+	return p
 }
 
 // IsValidWGResponse checks if raw bytes contain a valid WireGuard handshake response.
