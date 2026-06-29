@@ -369,9 +369,11 @@ func fetchCommunityEndpoints() map[string]communityEndpoint {
 		"https://raw.githubusercontent.com/ircfspace/endpoint/main/ip.json",
 		"https://cdn.jsdelivr.net/gh/ircfspace/endpoint/ip.json",
 		"https://github.com/ircfspace/endpoint/raw/main/ip.json",
+		"https://ircfspace.github.io/endpoint/ip.json",
 		"https://raw.githubusercontent.com/ircfspace/endpoint/main/v2.json",
 		"https://cdn.jsdelivr.net/gh/ircfspace/endpoint/v2.json",
 		"https://github.com/ircfspace/endpoint/raw/main/v2.json",
+		"https://ircfspace.github.io/endpoint/v2.json",
 	}
 	all := make(map[string]communityEndpoint)
 	for _, url := range urls {
