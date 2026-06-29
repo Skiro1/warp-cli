@@ -386,17 +386,15 @@ func fetchCommunityEndpoints() map[string]communityEndpoint {
 		}
 		break
 	}
-	if len(all) == 0 {
-		for _, url := range urls[4:] {
-			list, err := fetchAndParseCommunity(url)
-			if err != nil {
-				continue
-			}
-			for _, ep := range list {
-				all[ep.IP] = ep
-			}
-			break
+	for _, url := range urls[4:] {
+		list, err := fetchAndParseCommunity(url)
+		if err != nil {
+			continue
 		}
+		for _, ep := range list {
+			all[ep.IP] = ep
+		}
+		break
 	}
 	return all
 }
