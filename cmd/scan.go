@@ -253,6 +253,11 @@ func ScanEndpoints(community, fast bool) error {
 
 	scanResults := scanAliveEndpoints(ips, ports, clientPrivB64, serverPubB64, commEPs)
 
+	if len(scanResults) == 0 && hasKeys && serverPubB64 != warpServerPubKeyB64 {
+		fmt.Println("No endpoints with profile key, retrying with default WARP key...")
+		scanResults = scanAliveEndpoints(ips, ports, clientPrivB64, warpServerPubKeyB64, commEPs)
+	}
+
 	if len(scanResults) == 0 {
 		fmt.Println("No responding WARP endpoints found.")
 		return nil
@@ -288,7 +293,7 @@ func ScanEndpoints(community, fast bool) error {
 		if community {
 			commMark := ""
 			if r.InCommunity {
-				commMark = fmt.Sprintf("✓ %.1fms", r.CommLatency)
+				commMark = "✓"
 			}
 			fmt.Printf("%-18s %-5d %-8s %-9s\n", r.IP, r.Port, r.Latency.Round(time.Millisecond), commMark)
 		} else {
@@ -315,6 +320,16 @@ func ApplyBestEndpoint(profileName string) error {
 
 	ips := generateIPs()
 	results := scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, profile.PublicKey, nil)
+
+	if len(results) == 0 && profile.PublicKey != warpServerPubKeyB64 {
+		fmt.Printf("No endpoints with profile key, retrying with default WARP key...\n\n")
+		results = scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, warpServerPubKeyB64, nil)
+		if len(results) > 0 {
+			fmt.Printf("Default WARP key works! Your profile's public_key differs from the standard WARP key.\n")
+			fmt.Printf("This means your region uses a different WARP server key.\n")
+			fmt.Printf("Consider re-registering or updating public_key in your profile.\n\n")
+		}
+	}
 
 	if len(results) == 0 {
 		return fmt.Errorf("no responding WARP endpoints found, keeping current endpoint %s", profile.Endpoint)
