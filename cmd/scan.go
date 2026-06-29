@@ -425,18 +425,13 @@ func ApplyBestEndpoint(profileName string, useAWG bool, community bool, fast boo
 	return nil
 }
 
-// generateIPs generates the full IP list from all configured subnets.
+// generateIPs generates the full IP list from all configured subnets using LCG random permutation.
+// LCG ensures unbiased coverage: every IP is visited exactly once in random order.
 func generateIPs() []string {
-	var ips []string
-	for _, cidr := range scanSubnets {
-		_, ipnet, _ := net.ParseCIDR(cidr)
-		prefix := ipnet.IP.To4()
-		if prefix == nil {
-			continue
-		}
-		for i := 1; i <= 254; i++ {
-			ips = append(ips, fmt.Sprintf("%d.%d.%d.%d", prefix[0], prefix[1], prefix[2], i))
-		}
+	gen := newIPGenerator(scanSubnets, true)
+	ips := make([]string, 0, gen.len())
+	for len(ips) < gen.len() {
+		ips = append(ips, gen.nextBatch()...)
 	}
 	return ips
 }
