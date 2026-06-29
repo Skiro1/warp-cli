@@ -376,15 +376,26 @@ func fetchCommunityEndpoints() map[string]communityEndpoint {
 		"https://ircfspace.github.io/endpoint/v2.json",
 	}
 	all := make(map[string]communityEndpoint)
-	for _, url := range urls {
+	for _, url := range urls[:4] {
 		list, err := fetchAndParseCommunity(url)
 		if err != nil {
 			continue
 		}
 		for _, ep := range list {
-			if _, exists := all[ep.IP]; !exists {
+			all[ep.IP] = ep
+		}
+		break
+	}
+	if len(all) == 0 {
+		for _, url := range urls[4:] {
+			list, err := fetchAndParseCommunity(url)
+			if err != nil {
+				continue
+			}
+			for _, ep := range list {
 				all[ep.IP] = ep
 			}
+			break
 		}
 	}
 	return all
