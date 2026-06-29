@@ -339,16 +339,42 @@ func ScanEndpoints(community, fast, useAWG bool) error {
 }
 
 // ApplyBestEndpoint scans for the best WARP endpoint and updates the profile.
-func ApplyBestEndpoint(profileName string, useAWG bool) error {
+// Supports --community, --fast, and --awg flags for scan tuning.
+func ApplyBestEndpoint(profileName string, useAWG bool, community bool, fast bool) error {
 	profile, err := config.LoadProfile(profileName)
 	if err != nil {
 		return fmt.Errorf("load profile %q: %w", profileName, err)
 	}
 
-	fmt.Printf("Scanning for the best endpoint for profile %q...\n\n", profileName)
-	fmt.Printf("Scanning %d IPs...\n\n", len(scanSubnets)*254)
+	ports := scanPortList
+	if fast {
+		ports = fastPorts
+	}
 
-	ips := generateIPs()
+	fmt.Printf("Scanning for the best endpoint for profile %q...\n\n", profileName)
+
+	var ips []string
+	var commEPs map[string]communityEndpoint
+
+	if community {
+		fmt.Print("Fetching community endpoint lists...")
+		commEPs = fetchCommunityEndpoints()
+		if len(commEPs) > 0 {
+			fmt.Printf(" got %d endpoints\n", len(commEPs))
+			for ip := range commEPs {
+				ips = append(ips, ip)
+			}
+		} else {
+			fmt.Println(" none found, falling back to full scan")
+		}
+		fmt.Println()
+	}
+
+	if len(ips) == 0 {
+		ips = generateIPs()
+	}
+
+	fmt.Printf("Scanning %d IPs... (%d ports)\n\n", len(ips), len(ports))
 
 	var awgCfg *config.AWGConfig
 	if useAWG {
@@ -360,16 +386,23 @@ func ApplyBestEndpoint(profileName string, useAWG bool) error {
 		}
 	}
 
-	results := scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, profile.PublicKey, nil, awgCfg)
+	results := scanAliveEndpoints(ips, ports, profile.PrivateKey, profile.PublicKey, commEPs, awgCfg)
+
+	// Fallback from community IPs to full scan
+	if len(results) == 0 && community && len(commEPs) > 0 {
+		fmt.Printf("No endpoints from community list, retrying with full scan...\n\n")
+		ips = generateIPs()
+		results = scanAliveEndpoints(ips, ports, profile.PrivateKey, profile.PublicKey, nil, awgCfg)
+	}
 
 	if len(results) == 0 && awgCfg != nil {
 		fmt.Printf("AWG scan found nothing, retrying with plain WG...\n\n")
-		results = scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, profile.PublicKey, nil, nil)
+		results = scanAliveEndpoints(ips, ports, profile.PrivateKey, profile.PublicKey, nil, nil)
 	}
 
 	if len(results) == 0 && profile.PublicKey != warpServerPubKeyB64 {
 		fmt.Printf("No endpoints with profile key, retrying with default WARP key...\n\n")
-		results = scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, warpServerPubKeyB64, nil, nil)
+		results = scanAliveEndpoints(ips, ports, profile.PrivateKey, warpServerPubKeyB64, nil, nil)
 		if len(results) > 0 {
 			fmt.Printf("Default WARP key works! Your profile's public_key differs from the standard WARP key.\n")
 			fmt.Printf("This means your region uses a different WARP server key.\n")

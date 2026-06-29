@@ -293,7 +293,7 @@ start "zapret: %~n0" /min "%BIN%winws.exe" %IFACE_FILTER% --wf-tcp=80,443,...
 ## Планы
 
 - **Warp-in-WARP** — два слоя WARP: внешний AmneziaWG (обфускация), внутренний чистый WireGuard. Первый обходит DPI, второй даёт выход с WARP-IP. Для регионов с глубокой блокировкой.
-- **AWG-сканер** — сканер эндпоинтов через AmneziaWG (I1-I5, junk, padding) вместо чистого WireGuard. Для регионов где DPI режет WG handshake.
+- AWG-сканер реализован: `awarp scan --awg` использует warp-plus junk шум для обхода DPI.
 
 ## Примечания
 

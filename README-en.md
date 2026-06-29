@@ -293,7 +293,7 @@ If it still doesn't work:
 ## Plans
 
 - **Warp-in-WARP** — two WARP layers: outer AmneziaWG (obfuscation), inner plain WireGuard. The outer layer bypasses DPI, the inner provides WARP-IP exit. For regions with deep packet inspection blocking.
-- **AWG scanner** — endpoint scanner via AmneziaWG (I1-I5, junk, padding) instead of plain WireGuard. For regions where DPI blocks WG handshake.
+- AWG scanner implemented: `awarp scan --awg` uses warp-plus junk noise to bypass DPI.
 
 ## Notes
 

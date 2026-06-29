@@ -38,8 +38,8 @@ func main() {
 		cmd.Help()
 
 	case "register":
-		profile, license, awgArgs, sni, _, _, auto, _, awg := parseFlags(args)
-		if err := cmd.Register(profile, license, awgArgs, sni, auto, awg); err != nil {
+		profile, license, awgArgs, sni, _, community, auto, fast, awg := parseFlags(args)
+		if err := cmd.Register(profile, license, awgArgs, sni, auto, awg, community, fast); err != nil {
 			errExit(err)
 		}
 
