@@ -363,14 +363,15 @@ func generateIPs() []string {
 }
 
 // fetchCommunityEndpoints downloads community-verified endpoint lists and returns a map of IP -> metadata.
+// Tries multiple mirrors in order: raw.githubusercontent.com, jsDelivr CDN, github.com/raw.
 func fetchCommunityEndpoints() map[string]communityEndpoint {
-	// Multiple mirrors per file — try each until one works
-	// jsDelivr CDN as fallback when raw.githubusercontent.com is blocked
 	urls := []string{
 		"https://raw.githubusercontent.com/ircfspace/endpoint/main/ip.json",
 		"https://cdn.jsdelivr.net/gh/ircfspace/endpoint/ip.json",
+		"https://github.com/ircfspace/endpoint/raw/main/ip.json",
 		"https://raw.githubusercontent.com/ircfspace/endpoint/main/v2.json",
 		"https://cdn.jsdelivr.net/gh/ircfspace/endpoint/v2.json",
+		"https://github.com/ircfspace/endpoint/raw/main/v2.json",
 	}
 	all := make(map[string]communityEndpoint)
 	for _, url := range urls {
