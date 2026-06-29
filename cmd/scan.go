@@ -372,9 +372,43 @@ func fetchCommunityEndpoints() map[string]communityEndpoint {
 	return all
 }
 
+// parseCommunityIPPort splits "ip:port" or "[ip]:port" into IP and port.
+func parseCommunityIPPort(s string) (string, int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", 0, false
+	}
+	// IPv6: [2606:...]:port
+	if strings.HasPrefix(s, "[") {
+		closeB := strings.LastIndex(s, "]")
+		if closeB < 0 {
+			return "", 0, false
+		}
+		ip := s[1:closeB]
+		portStr := ""
+		if closeB+2 <= len(s) {
+			portStr = s[closeB+2:]
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil || port < 1 || port > 65535 {
+			return "", 0, false
+		}
+		return ip, port, true
+	}
+	// IPv4: ip:port
+	host, portStr, ok := strings.Cut(s, ":")
+	if !ok {
+		return "", 0, false
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return "", 0, false
+	}
+	return host, port, true
+}
+
 // fetchAndParseCommunity downloads and parses a community endpoint JSON file.
-// Supports both array format [{"ip":"...","port":N,"ping":X}] and
-// object format {"subnet":{"ip":{"ping":X,"port":N}}}.
+// Supports multiple formats used by ircfspace/endpoint and other providers.
 func fetchAndParseCommunity(url string) ([]communityEndpoint, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
@@ -388,23 +422,74 @@ func fetchAndParseCommunity(url string) ([]communityEndpoint, error) {
 		return nil, err
 	}
 
+	var result []communityEndpoint
+
+	// Format 1: [{"ip":"...","port":N,"ping":X}, ...]
 	var arr []communityEndpoint
-	if err := json.Unmarshal(body, &arr); err == nil {
+	if err := json.Unmarshal(body, &arr); err == nil && len(arr) > 0 {
 		return arr, nil
 	}
 
-	var obj map[string]map[string]struct {
+	// Format 2: {"subnet":{"ip":{"ping":X,"port":N}}}
+	var objMap map[string]map[string]struct {
 		Ping float64 `json:"ping"`
 		Port int     `json:"port"`
 	}
-	if err := json.Unmarshal(body, &obj); err == nil {
-		var result []communityEndpoint
-		for _, subnet := range obj {
+	if err := json.Unmarshal(body, &objMap); err == nil {
+		for _, subnet := range objMap {
 			for ip, ep := range subnet {
 				result = append(result, communityEndpoint{IP: ip, Port: ep.Port, Ping: ep.Ping})
 			}
 		}
-		return result, nil
+		if len(result) > 0 {
+			return result, nil
+		}
+	}
+
+	// Format 3: {"ipv4":["ip:port",...], "ipv6":["[ip]:port",...]}
+	var flatList struct {
+		IPv4 []string `json:"ipv4"`
+		IPv6 []string `json:"ipv6"`
+	}
+	if err := json.Unmarshal(body, &flatList); err == nil {
+		for _, s := range flatList.IPv4 {
+			if ip, port, ok := parseCommunityIPPort(s); ok {
+				result = append(result, communityEndpoint{IP: ip, Port: port})
+			}
+		}
+		for _, s := range flatList.IPv6 {
+			if ip, port, ok := parseCommunityIPPort(s); ok {
+				result = append(result, communityEndpoint{IP: ip, Port: port})
+			}
+		}
+		if len(result) > 0 {
+			return result, nil
+		}
+	}
+
+	// Format 4: {"warp":{"ipv4":[...],"ipv6":[...]}, "masque":{"ipv4":[...],"ipv6":[...]}}
+	var nested struct {
+		Warp struct {
+			IPv4 []string `json:"ipv4"`
+			IPv6 []string `json:"ipv6"`
+		} `json:"warp"`
+		Masque struct {
+			IPv4 []string `json:"ipv4"`
+			IPv6 []string `json:"ipv6"`
+		} `json:"masque"`
+	}
+	if err := json.Unmarshal(body, &nested); err == nil {
+		lists := [][]string{nested.Warp.IPv4, nested.Warp.IPv6, nested.Masque.IPv4, nested.Masque.IPv6}
+		for _, list := range lists {
+			for _, s := range list {
+				if ip, port, ok := parseCommunityIPPort(s); ok {
+					result = append(result, communityEndpoint{IP: ip, Port: port})
+				}
+			}
+		}
+		if len(result) > 0 {
+			return result, nil
+		}
 	}
 
 	return nil, fmt.Errorf("unknown community JSON format")
