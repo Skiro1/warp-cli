@@ -516,8 +516,17 @@ func parseCommunityIPPort(s string) (string, int, bool) {
 // fetchAndParseCommunity downloads and parses a community endpoint JSON file.
 // Supports multiple formats used by ircfspace/endpoint and other providers.
 func fetchAndParseCommunity(url string) ([]communityEndpoint, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Referer", "https://ircfspace.github.io/endpoint/")
+	req.Header.Set("Cache-Control", "no-cache")
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -755,9 +764,8 @@ func udpProbeRegistered(ip string, port int, clientPrivB64, serverPubB64 string)
 }
 
 // udpProbeAWG sends warp-plus junk noise + plain WireGuard handshake initiation.
-// The junk packets (20-50 random, 80-150ms apart) confuse DPI before the real
-// handshake. This is the approach used by warp-plus and works where plain WG
-// is blocked by DPI (Iran, UAE, etc.).
+// Uses scan-optimized junk count (3-7 packets) for speed. warp-plus uses 20-50
+// for tunnels but scanning needs faster probes.
 func udpProbeAWG(ip string, port int, clientPrivB64, serverPubB64 string, awgCfg config.AWGConfig) bool {
 	rip := net.ParseIP(ip)
 	if rip == nil || rip.To4() == nil {
@@ -767,7 +775,7 @@ func udpProbeAWG(ip string, port int, clientPrivB64, serverPubB64 string, awgCfg
 	if err != nil {
 		return false
 	}
-	pkts := warp.BuildJunkPackets(wgInit, awgCfg.S2)
+	pkts := warp.BuildJunkPacketsN(wgInit, awgCfg.S2, 5)
 	addr := &net.UDPAddr{IP: rip, Port: port}
 	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {

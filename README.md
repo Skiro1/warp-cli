@@ -292,8 +292,10 @@ start "zapret: %~n0" /min "%BIN%winws.exe" %IFACE_FILTER% --wf-tcp=80,443,...
 
 ## Планы
 
-- **Warp-in-WARP** — два слоя WARP: внешний AmneziaWG (обфускация), внутренний чистый WireGuard. Первый обходит DPI, второй даёт выход с WARP-IP. Для регионов с глубокой блокировкой.
-- AWG-сканер реализован: `awarp scan --awg` использует warp-plus junk шум для обхода DPI.
+- **SOCKS5 proxy-режим** — вместо kernel TUN (админ, Wintun, роуты, DNS, фаерволл) — userspace WireGuard через gVisor netstack. SOCKS5 на `127.0.0.1:8086` без прав администратора. Никаких конфликтов с WinDivert/zapret. Единый бинарник без sidecar. (из warp-plus)
+- **LCG-рандомизация IP** — замена последовательного сканирования на LCG (Linear Congruential Generator) для равномерного unbiased покрытия Cloudflare подсетей. (из warp-plus)
+- **Расширенные CIDR-диапазоны** — сканирование всех 21 префикса Cloudflare AS вместо 5 узких /24 подсетей. Больше coverage, больше найденных эндпоинтов. (из warp-plus)
+- **TLS fingerprint rotation** — 3-уровневый fallback для WARP API: uTLS (Chrome fingerprint) → stdlib TLS 1.3 → uTLS Chrome_Auto. Решит проблему keepalive timeout в регионах где stdlib TLS блокирован. (из warp-plus)
 
 ## Примечания
 

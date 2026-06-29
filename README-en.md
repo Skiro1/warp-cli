@@ -292,8 +292,10 @@ If it still doesn't work:
 
 ## Plans
 
-- **Warp-in-WARP** — two WARP layers: outer AmneziaWG (obfuscation), inner plain WireGuard. The outer layer bypasses DPI, the inner provides WARP-IP exit. For regions with deep packet inspection blocking.
-- AWG scanner implemented: `awarp scan --awg` uses warp-plus junk noise to bypass DPI.
+- **SOCKS5 proxy mode** — replace kernel TUN (admin, wintun, routes, DNS, firewall) with userspace WireGuard via gVisor netstack. SOCKS5 on `127.0.0.1:8086` without admin privileges. No more conflict with WinDivert/zapret. Single binary, no sidecar. (from warp-plus)
+- **LCG IP randomization** — replace sequential scanning with LCG (Linear Congruential Generator) for uniform unbiased coverage of Cloudflare subnets. (from warp-plus)
+- **Expanded CIDR ranges** — scan all 21 Cloudflare AS prefixes instead of 5 narrow /24 subnets. More coverage, more endpoints found. (from warp-plus)
+- **TLS fingerprint rotation** — 3-tier fallback for WARP API: uTLS (Chrome fingerprint) → stdlib TLS 1.3 → uTLS Chrome_Auto. Fixes keepalive timeout in regions where stdlib TLS is blocked. (from warp-plus)
 
 ## Notes
 

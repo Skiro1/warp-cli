@@ -108,12 +108,25 @@ type AWGPackets struct {
 // This is the correct approach for Cloudflare WARP scanning: random noise
 // confuses DPI before the real handshake, without AWG frames (which
 // Cloudflare servers don't understand).
+// junkCount: max junk packets (0 = default 20-50 range).
 func BuildJunkPackets(wgInit []byte, s2Padding int) *AWGPackets {
+	return BuildJunkPacketsN(wgInit, s2Padding, 0)
+}
+
+// BuildJunkPacketsN is like BuildJunkPackets but with explicit junk count control.
+// If junkN <= 6, uses scan-friendly 3-7 packets; otherwise uses junkN/2 to junkN.
+func BuildJunkPacketsN(wgInit []byte, s2Padding, junkN int) *AWGPackets {
 	p := &AWGPackets{}
 
-	// warp-plus junk (20-50 random packets)
-	junkCount := int(20 + randomInt64(0, 30))
-	for i := 0; i < junkCount; i++ {
+	var junkCount int64
+	if junkN <= 0 {
+		junkCount = 20 + randomInt64(0, 30) // default: 20-50
+	} else if junkN <= 6 {
+		junkCount = 3 + randomInt64(0, 4) // scan mode: 3-7
+	} else {
+		junkCount = int64(junkN/2) + randomInt64(0, int64(junkN/2))
+	}
+	for i := int64(0); i < junkCount; i++ {
 		size := int(40 + randomInt64(0, 60))
 		pkt := make([]byte, size)
 		rand.Read(pkt)
