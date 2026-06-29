@@ -114,7 +114,18 @@ func (s *warpService) Execute(args []string, r <-chan svc.ChangeRequest, changes
 		return false, 1
 	}
 
-	// Step 5: Bring device up
+	// Step 5: Configure network (IP, routes, DNS) BEFORE bringing device up.
+	// Order matters: network config can reset the Wintun adapter, which would
+	// kill the TUN reader if the device is already up.
+	if nt, ok := wt.(*tun.NativeTun); ok {
+		if err := configureNetworkWinipcfg(nt, cfg); err != nil {
+			log.Printf("WARNING: network config: %v", err)
+		}
+	} else {
+		log.Printf("WARNING: cannot get NativeTun for network config")
+	}
+
+	// Step 6: Bring device up
 	if err := dev.Up(); err != nil {
 		log.Printf("FATAL: device up: %v", err)
 		uapi.Close()
@@ -124,7 +135,7 @@ func (s *warpService) Execute(args []string, r <-chan svc.ChangeRequest, changes
 	}
 	log.Println("WireGuard device is up")
 
-	// Step 5b: Bind UDP socket to physical interface (like official client)
+	// Step 6b: Bind UDP socket to physical interface (like official client)
 	if mb, ok := bind.(*conn.Multibind); ok {
 		if binder, ok := mb.Bind.(conn.BindSocketToInterface); ok {
 			if phyIdx := findPhysicalInterfaceIndex(wt); phyIdx != 0 {
@@ -140,7 +151,7 @@ func (s *warpService) Execute(args []string, r <-chan svc.ChangeRequest, changes
 		log.Println("WARNING: bind is not Multibind")
 	}
 
-	// Step 5c: Enable WFP firewall (kill switch + DNS leak protection)
+	// Step 6c: Enable WFP firewall (kill switch + DNS leak protection)
 	if nt, ok := wt.(*tun.NativeTun); ok {
 		dnsIP := net.ParseIP("1.1.1.1")
 		if err := firewall.EnableFirewall(nt.LUID(), false, []net.IP{dnsIP}); err != nil {
@@ -154,15 +165,6 @@ func (s *warpService) Execute(args []string, r <-chan svc.ChangeRequest, changes
 		} else {
 			log.Println("WFP firewall enabled (restricted)")
 		}
-	}
-
-	// Step 6: Configure network (IP, routes, DNS) via winipcfg like official client
-	if nt, ok := wt.(*tun.NativeTun); ok {
-		if err := configureNetworkWinipcfg(nt, cfg); err != nil {
-			log.Printf("WARNING: network config: %v", err)
-		}
-	} else {
-		log.Printf("WARNING: cannot get NativeTun for network config")
 	}
 
 	// Step 7: Accept UAPI connections
