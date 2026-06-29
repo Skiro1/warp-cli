@@ -2,15 +2,19 @@ package warp
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 
+	utls "github.com/refraction-networking/utls"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -18,7 +22,7 @@ const (
 	apiBaseURL = "https://api.cloudflareclient.com"
 	apiVersion = "v0a2158"
 	userAgent  = "okhttp/3.12.1"
-	timeout    = 15 * time.Second
+	timeout    = 20 * time.Second
 )
 
 type Client struct {
@@ -29,6 +33,58 @@ func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{Timeout: timeout},
 	}
+}
+
+// NewClientWithUTLS creates a client with uTLS fingerprint rotation (stdlib + uTLS fallback).
+// Useful in regions with TLS fingerprint blocking.
+func NewClientWithUTLS() *Client {
+	tr := &http.Transport{
+		DialTLSContext: dialUTLSWithFallback,
+	}
+	return &Client{
+		httpClient: &http.Client{Timeout: timeout, Transport: tr},
+	}
+}
+
+// dialUTLSWithFallback tries stdlib TLS first, then uTLS Chrome/Firefox fingerprints.
+func dialUTLSWithFallback(ctx context.Context, network, addr string) (net.Conn, error) {
+	tlsCfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		NextProtos: []string{"h2", "http/1.1"},
+	}
+
+	// Tier 1: stdlib TLS
+	tcpConn, err := new(net.Dialer).DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, fmt.Errorf("tcp dial: %w", err)
+	}
+	tlsConn := tls.Client(tcpConn, tlsCfg)
+	if err := tlsConn.HandshakeContext(ctx); err == nil {
+		return tlsConn, nil
+	}
+	tcpConn.Close()
+
+	// Tier 2: uTLS Chrome fingerprint
+	specs := []utls.ClientHelloID{
+		utls.HelloChrome_Auto,
+		utls.HelloFirefox_Auto,
+	}
+	for _, spec := range specs {
+		tcpConn, err := new(net.Dialer).DialContext(ctx, network, addr)
+		if err != nil {
+			continue
+		}
+		uConn := utls.UClient(tcpConn, &utls.Config{
+			ServerName: "api.cloudflareclient.com",
+			NextProtos: []string{"h2", "http/1.1"},
+		}, spec)
+		if err := uConn.Handshake(); err == nil {
+			return uConn, nil
+		}
+		tcpConn.Close()
+	}
+
+	return nil, fmt.Errorf("all TLS methods failed")
 }
 
 func GenerateKeyPair() (privateKey, publicKey string, err error) {

@@ -158,7 +158,10 @@ AWG PARAMETERS:
 FLAGS:
   --community       Use community endpoint list (with scan)
   --fast            Scan only 8 common ports (faster)
+  --full-as         Scan all Cloudflare AS prefixes (maximum coverage)
   --auto            Register + optimize endpoint in one command
+  --i1-mode MODE    I1 generation: legacy, reorder, safe (default: safe)
+  --sni DOMAIN      Generate I1 from SNI domain
 
 ENDPOINTS:
   Default: engage.cloudflareclient.com:2408
@@ -177,6 +180,7 @@ EXAMPLES:
   awarp scan
   awarp scan --fast                                # scan only 8 common ports
   awarp scan --community                            # scan with community list
+  awarp scan --full-as                              # scan all AS prefixes
   awarp config set --profile mywarp --endpoint 162.159.192.179:2408
   awarp config set --profile mywarp --set-awg jmin=100
 `

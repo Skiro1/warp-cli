@@ -30,20 +30,49 @@ const (
 )
 
 var scanSubnets = []string{
-	"162.159.192.0/24",
-	"162.159.193.0/24",
-	"162.159.195.0/24",
-	"188.114.96.0/24",
-	"188.114.97.0/24",
+	// Broad WARP ranges (covers multiple /24s in Cloudflare AS13335)
+	"162.159.192.0/21",   // 2046 IPs — covers .192-.199 (8 /24s)
+	"188.114.96.0/20",    // 4094 IPs — covers .96-.111 (16 /24s)
+	// Specific /24s from various Cloudflare AS subnets
+	"8.6.112.0/24",
+	"8.34.70.0/24",
+	"8.34.146.0/24",
+	"8.35.211.0/24",
+	"8.39.125.0/24",
+	"8.39.204.0/24",
+	"8.39.214.0/24",
+	"8.47.69.0/24",
+}
+
+// fullASSubnets extends scanSubnets with all remaining Cloudflare AS prefixes
+// for maximum coverage. Adds adjacent ranges that may host WARP servers.
+var fullASSubnets = []string{
+	"162.159.200.0/21",   // 2046 IPs — .200-.207
+	"162.159.208.0/21",   // 2046 IPs — .208-.215
+	"162.159.216.0/21",   // 2046 IPs — .216-.223
+	"162.159.224.0/21",   // 2046 IPs — .224-.231
+	"162.159.232.0/21",   // 2046 IPs — .232-.239
+	"162.159.240.0/21",   // 2046 IPs — .240-.247
+	"162.159.248.0/21",   // 2046 IPs — .248-.255
+	"188.114.112.0/20",   // 4094 IPs — .112-.127
+	"188.114.128.0/20",   // 4094 IPs — .128-.143
+	"188.114.144.0/20",   // 4094 IPs — .144-.159
+	"188.114.160.0/20",   // 4094 IPs — .160-.175
+	"188.114.176.0/20",   // 4094 IPs — .176-.191
+	"188.114.192.0/20",   // 4094 IPs — .192-.207
+	"188.114.208.0/20",   // 4094 IPs — .208-.223
+	"188.114.224.0/20",   // 4094 IPs — .224-.239
+	"188.114.240.0/20",   // 4094 IPs — .240-.255
 }
 
 var scanPortList = []int{
 	2408, 500, 1701, 4500,
-	854, 859, 864, 878, 880, 890, 894, 903, 942, 943,
-	945, 946, 955, 968, 987, 988, 1002, 1010, 1014, 1018,
-	1070, 1074, 1180, 1387, 1843, 2371, 2506, 3476, 3581,
-	3854, 4177, 4198, 4233, 5279, 5956, 7103, 7152, 7156,
-	7281, 8886,
+	854, 859, 864, 878, 880, 890, 891, 894, 903, 908,
+	928, 934, 939, 942, 943, 945, 946, 955, 968, 987,
+	988, 1002, 1010, 1014, 1018, 1070, 1074, 1180, 1387,
+	1843, 2371, 2506, 3138, 3476, 3581, 3854, 4177, 4198,
+	4233, 5279, 5956, 7103, 7152, 7156, 7281, 7559, 8319,
+	8742, 8854, 8886,
 }
 
 var fastPorts = []int{2408, 500, 1701, 4500, 1002, 7281, 3581, 878}
@@ -205,13 +234,26 @@ func scanAliveEndpoints(ips []string, ports []int, clientPrivB64, serverPubB64 s
 	return scanResults
 }
 
-func ScanEndpoints(community, fast, useAWG bool) error {
+// resolveSubnets returns the list of subnets to scan, combining base ranges
+// with full-AS ranges when fullAS is true.
+func resolveSubnets(fullAS bool) []string {
+	if !fullAS {
+		return scanSubnets
+	}
+	all := make([]string, len(scanSubnets)+len(fullASSubnets))
+	copy(all, scanSubnets)
+	copy(all[len(scanSubnets):], fullASSubnets)
+	return all
+}
+
+func ScanEndpoints(community, fast, useAWG, fullAS bool) error {
+	subnets := resolveSubnets(fullAS)
 	ports := scanPortList
 	if fast {
 		ports = fastPorts
 	}
-	fmt.Printf("Scanning Cloudflare WARP endpoints (%d subnets)\n", len(scanSubnets))
-	for _, s := range scanSubnets {
+	fmt.Printf("Scanning Cloudflare WARP endpoints (%d subnets)\n", len(subnets))
+	for _, s := range subnets {
 		fmt.Printf("  %s\n", s)
 	}
 	fmt.Printf("Ports:  %d%s\n", len(ports), map[bool]string{true: " (fast mode)"}[fast])
@@ -236,7 +278,7 @@ func ScanEndpoints(community, fast, useAWG bool) error {
 			ips = append(ips, ip)
 		}
 	} else {
-		ips = generateIPs()
+		ips = generateIPs(subnets)
 	}
 
 	// Load profile keys for proper WG handshake (fall back to no-MAC1 probe)
@@ -339,8 +381,8 @@ func ScanEndpoints(community, fast, useAWG bool) error {
 }
 
 // ApplyBestEndpoint scans for the best WARP endpoint and updates the profile.
-// Supports --community, --fast, and --awg flags for scan tuning.
-func ApplyBestEndpoint(profileName string, useAWG bool, community bool, fast bool) error {
+// Supports --community, --fast, --awg, and --full-as flags for scan tuning.
+func ApplyBestEndpoint(profileName string, useAWG bool, community bool, fast bool, fullAS bool) error {
 	profile, err := config.LoadProfile(profileName)
 	if err != nil {
 		return fmt.Errorf("load profile %q: %w", profileName, err)
@@ -350,6 +392,8 @@ func ApplyBestEndpoint(profileName string, useAWG bool, community bool, fast boo
 	if fast {
 		ports = fastPorts
 	}
+
+	subnets := resolveSubnets(fullAS)
 
 	fmt.Printf("Scanning for the best endpoint for profile %q...\n\n", profileName)
 
@@ -371,7 +415,7 @@ func ApplyBestEndpoint(profileName string, useAWG bool, community bool, fast boo
 	}
 
 	if len(ips) == 0 {
-		ips = generateIPs()
+		ips = generateIPs(subnets)
 	}
 
 	fmt.Printf("Scanning %d IPs... (%d ports)\n\n", len(ips), len(ports))
@@ -391,7 +435,7 @@ func ApplyBestEndpoint(profileName string, useAWG bool, community bool, fast boo
 	// Fallback from community IPs to full scan
 	if len(results) == 0 && community && len(commEPs) > 0 {
 		fmt.Printf("No endpoints from community list, retrying with full scan...\n\n")
-		ips = generateIPs()
+		ips = generateIPs(subnets)
 		results = scanAliveEndpoints(ips, ports, profile.PrivateKey, profile.PublicKey, nil, awgCfg)
 	}
 
@@ -425,10 +469,10 @@ func ApplyBestEndpoint(profileName string, useAWG bool, community bool, fast boo
 	return nil
 }
 
-// generateIPs generates the full IP list from all configured subnets using LCG random permutation.
+// generateIPs generates the full IP list from the given subnets using LCG random permutation.
 // LCG ensures unbiased coverage: every IP is visited exactly once in random order.
-func generateIPs() []string {
-	gen := newIPGenerator(scanSubnets, true)
+func generateIPs(subnets []string) []string {
+	gen := newIPGenerator(subnets, true)
 	ips := make([]string, 0, gen.len())
 	for len(ips) < gen.len() {
 		ips = append(ips, gen.nextBatch()...)

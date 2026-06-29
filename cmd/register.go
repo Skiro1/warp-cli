@@ -9,7 +9,7 @@ import (
 	"warp-cli/warp"
 )
 
-func Register(profileName, license string, awgArgs []string, sni string, auto bool, useAWG bool, community bool, fast bool) error {
+func Register(profileName, license string, awgArgs []string, sni string, auto bool, useAWG bool, community bool, fast bool, fullAS bool, i1Mode string) error {
 	existing, _ := config.LoadProfile(profileName)
 	if existing != nil && existing.PrivateKey != "" {
 		if !auto {
@@ -17,7 +17,7 @@ func Register(profileName, license string, awgArgs []string, sni string, auto bo
 		}
 		fmt.Printf("Profile %q already exists. Skipping registration, optimizing endpoint...\n", profileName)
 		fmt.Println()
-		return ApplyBestEndpoint(profileName, useAWG, community, fast)
+		return ApplyBestEndpoint(profileName, useAWG, community, fast, fullAS)
 	}
 
 	wc := warp.NewClient()
@@ -71,12 +71,16 @@ func Register(profileName, license string, awgArgs []string, sni string, auto bo
 	}
 
 	if sni != "" {
-		i1, err := warp.GenerateI1FromSNI(sni)
+		strategy := warp.ParseI1Strategy(i1Mode)
+		i1, err := warp.GenerateI1FromSNI(sni, strategy)
 		if err != nil {
 			return fmt.Errorf("generate I1 from SNI %q: %w", sni, err)
 		}
 		awg.I1 = i1
-		fmt.Printf("  I1 (SNI: %s): generated\n", sni)
+		fmt.Printf("  I1 (SNI: %s, mode=%s): generated\n", sni, strategy)
+	} else {
+		// Pick a random static mask for better DPI diversity
+		awg.I1 = warp.PickI1Mask()
 	}
 
 	profile := &config.Profile{
@@ -116,7 +120,7 @@ func Register(profileName, license string, awgArgs []string, sni string, auto bo
 		fmt.Println()
 		fmt.Println("Auto-optimizing endpoint...")
 		fmt.Println()
-		if err := ApplyBestEndpoint(profileName, useAWG, community, fast); err != nil {
+		if err := ApplyBestEndpoint(profileName, useAWG, community, fast, fullAS); err != nil {
 			fmt.Printf("Warning: endpoint optimization failed: %v\n", err)
 			fmt.Printf("You can still use the default endpoint or run 'awarp scan' manually.\n")
 		}
