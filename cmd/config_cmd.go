@@ -155,6 +155,11 @@ AWG PARAMETERS:
   h1-h4            Message headers
   i1-i5            Custom signature packets
 
+FLAGS:
+  --community       Use community endpoint list (with scan)
+  --fast            Scan only 8 common ports (faster)
+  --auto            Register + optimize endpoint in one command
+
 ENDPOINTS:
   Default: engage.cloudflareclient.com:2408
   Direct IP: 162.159.193.1:2408
@@ -170,6 +175,8 @@ EXAMPLES:
   awarp register --profile mywarp --auto           # register + scan best endpoint
   awarp up --profile mywarp
   awarp scan
+  awarp scan --fast                                # scan only 8 common ports
+  awarp scan --community                            # scan with community list
   awarp config set --profile mywarp --endpoint 162.159.192.179:2408
   awarp config set --profile mywarp --set-awg jmin=100
 `

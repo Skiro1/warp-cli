@@ -45,6 +45,8 @@ var scanPortList = []int{
 	7281, 8886,
 }
 
+var fastPorts = []int{2408, 500, 1701, 4500, 1002, 7281, 3581, 878}
+
 type ScanResult struct {
 	IP          string
 	Port        int
@@ -73,7 +75,7 @@ type communityEndpoint struct {
 
 // scanAliveEndpoints runs ICMP ping + UDP WireGuard handshake probe on the given IPs
 // and returns alive endpoints sorted by latency. Keys can be empty for MAC1-only fallback.
-func scanAliveEndpoints(ips []string, clientPrivB64, serverPubB64 string, commEPs map[string]communityEndpoint) []ScanResult {
+func scanAliveEndpoints(ips []string, ports []int, clientPrivB64, serverPubB64 string, commEPs map[string]communityEndpoint) []ScanResult {
 	// Phase 1: ICMP ping
 	var results []ipLatency
 	var mu sync.Mutex
@@ -132,11 +134,11 @@ func scanAliveEndpoints(ips []string, clientPrivB64, serverPubB64 string, commEP
 	var mu2 sync.Mutex
 	var wg2 sync.WaitGroup
 	sem2 := make(chan struct{}, scanConcurrency)
-	totalProbes := limit * len(scanPortList)
+	totalProbes := limit * len(ports)
 	var probeDone int
 
 	for _, r := range reachable[:limit] {
-		for _, port := range scanPortList {
+		for _, port := range ports {
 			wg2.Add(1)
 			sem2 <- struct{}{}
 			go func(ip string, port int, privKey, pubKey string) {
@@ -197,12 +199,16 @@ func scanAliveEndpoints(ips []string, clientPrivB64, serverPubB64 string, commEP
 	return scanResults
 }
 
-func ScanEndpoints(community bool) error {
+func ScanEndpoints(community, fast bool) error {
+	ports := scanPortList
+	if fast {
+		ports = fastPorts
+	}
 	fmt.Printf("Scanning Cloudflare WARP endpoints (%d subnets)\n", len(scanSubnets))
 	for _, s := range scanSubnets {
 		fmt.Printf("  %s\n", s)
 	}
-	fmt.Printf("Ports:  %d\n", len(scanPortList))
+	fmt.Printf("Ports:  %d%s\n", len(ports), map[bool]string{true: " (fast mode)"}[fast])
 	fmt.Printf("Method: ICMP ping + WireGuard handshake probe\n")
 	fmt.Println()
 
@@ -245,7 +251,7 @@ func ScanEndpoints(community bool) error {
 		serverPubB64 = profile.PublicKey
 	}
 
-	scanResults := scanAliveEndpoints(ips, clientPrivB64, serverPubB64, commEPs)
+	scanResults := scanAliveEndpoints(ips, ports, clientPrivB64, serverPubB64, commEPs)
 
 	if len(scanResults) == 0 {
 		fmt.Println("No responding WARP endpoints found.")
@@ -308,7 +314,7 @@ func ApplyBestEndpoint(profileName string) error {
 	fmt.Printf("Scanning %d IPs...\n\n", len(scanSubnets)*254)
 
 	ips := generateIPs()
-	results := scanAliveEndpoints(ips, profile.PrivateKey, profile.PublicKey, nil)
+	results := scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, profile.PublicKey, nil)
 
 	if len(results) == 0 {
 		return fmt.Errorf("no responding WARP endpoints found, keeping current endpoint %s", profile.Endpoint)
@@ -343,9 +349,13 @@ func generateIPs() []string {
 
 // fetchCommunityEndpoints downloads community-verified endpoint lists and returns a map of IP -> metadata.
 func fetchCommunityEndpoints() map[string]communityEndpoint {
+	// Multiple mirrors per file — try each until one works
+	// jsDelivr CDN as fallback when raw.githubusercontent.com is blocked
 	urls := []string{
 		"https://raw.githubusercontent.com/ircfspace/endpoint/main/ip.json",
+		"https://cdn.jsdelivr.net/gh/ircfspace/endpoint/ip.json",
 		"https://raw.githubusercontent.com/ircfspace/endpoint/main/v2.json",
+		"https://cdn.jsdelivr.net/gh/ircfspace/endpoint/v2.json",
 	}
 	all := make(map[string]communityEndpoint)
 	for _, url := range urls {
