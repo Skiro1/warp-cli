@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os/exec"
@@ -75,7 +76,8 @@ type communityEndpoint struct {
 
 // scanAliveEndpoints runs ICMP ping + UDP WireGuard handshake probe on the given IPs
 // and returns alive endpoints sorted by latency. Keys can be empty for MAC1-only fallback.
-func scanAliveEndpoints(ips []string, ports []int, clientPrivB64, serverPubB64 string, commEPs map[string]communityEndpoint) []ScanResult {
+// If awgCfg is non-nil, uses AmneziaWG obfuscation (junk + I1-I5 frames + padding).
+func scanAliveEndpoints(ips []string, ports []int, clientPrivB64, serverPubB64 string, commEPs map[string]communityEndpoint, awgCfg *config.AWGConfig) []ScanResult {
 	// Phase 1: ICMP ping
 	var results []ipLatency
 	var mu sync.Mutex
@@ -146,7 +148,11 @@ func scanAliveEndpoints(ips []string, ports []int, clientPrivB64, serverPubB64 s
 				defer func() { <-sem2 }()
 				var alive bool
 				if privKey != "" {
-					alive = udpProbeRegistered(ip, port, privKey, pubKey)
+					if awgCfg != nil {
+						alive = udpProbeAWG(ip, port, privKey, pubKey, *awgCfg)
+					} else {
+						alive = udpProbeRegistered(ip, port, privKey, pubKey)
+					}
 				} else {
 					alive = udpProbe(ip, port)
 				}
@@ -199,7 +205,7 @@ func scanAliveEndpoints(ips []string, ports []int, clientPrivB64, serverPubB64 s
 	return scanResults
 }
 
-func ScanEndpoints(community, fast bool) error {
+func ScanEndpoints(community, fast, useAWG bool) error {
 	ports := scanPortList
 	if fast {
 		ports = fastPorts
@@ -251,11 +257,35 @@ func ScanEndpoints(community, fast bool) error {
 		serverPubB64 = profile.PublicKey
 	}
 
-	scanResults := scanAliveEndpoints(ips, ports, clientPrivB64, serverPubB64, commEPs)
+	// AWG config
+	var awgCfg *config.AWGConfig
+	if useAWG && hasKeys {
+		if profile.AWG.Jc > 0 || profile.AWG.I1 != "" {
+			awgCfg = &profile.AWG
+			fmt.Println("Using AmneziaWG obfuscation from profile")
+		} else {
+			def := config.DefaultAWG
+			awgCfg = &def
+			fmt.Println("Using default AmneziaWG obfuscation")
+		}
+	}
+	if useAWG && !hasKeys {
+		fmt.Println("Warning: --awg requires a registered profile, falling back to plain WG")
+	}
 
+	scanResults := scanAliveEndpoints(ips, ports, clientPrivB64, serverPubB64, commEPs, awgCfg)
+
+	// Fallback chain:
+	// 1. AWG → plain WG if AWG found nothing
+	if len(scanResults) == 0 && awgCfg != nil {
+		fmt.Println("No endpoints with AWG, retrying with plain WireGuard handshake...")
+		scanResults = scanAliveEndpoints(ips, ports, clientPrivB64, serverPubB64, commEPs, nil)
+	}
+
+	// 2. Profile key → default WARP key if profile key differs
 	if len(scanResults) == 0 && hasKeys && serverPubB64 != warpServerPubKeyB64 {
 		fmt.Println("No endpoints with profile key, retrying with default WARP key...")
-		scanResults = scanAliveEndpoints(ips, ports, clientPrivB64, warpServerPubKeyB64, commEPs)
+		scanResults = scanAliveEndpoints(ips, ports, clientPrivB64, warpServerPubKeyB64, commEPs, nil)
 	}
 
 	if len(scanResults) == 0 {
@@ -309,7 +339,7 @@ func ScanEndpoints(community, fast bool) error {
 }
 
 // ApplyBestEndpoint scans for the best WARP endpoint and updates the profile.
-func ApplyBestEndpoint(profileName string) error {
+func ApplyBestEndpoint(profileName string, useAWG bool) error {
 	profile, err := config.LoadProfile(profileName)
 	if err != nil {
 		return fmt.Errorf("load profile %q: %w", profileName, err)
@@ -319,11 +349,27 @@ func ApplyBestEndpoint(profileName string) error {
 	fmt.Printf("Scanning %d IPs...\n\n", len(scanSubnets)*254)
 
 	ips := generateIPs()
-	results := scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, profile.PublicKey, nil)
+
+	var awgCfg *config.AWGConfig
+	if useAWG {
+		if profile.AWG.Jc > 0 || profile.AWG.I1 != "" {
+			awgCfg = &profile.AWG
+		} else {
+			def := config.DefaultAWG
+			awgCfg = &def
+		}
+	}
+
+	results := scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, profile.PublicKey, nil, awgCfg)
+
+	if len(results) == 0 && awgCfg != nil {
+		fmt.Printf("AWG scan found nothing, retrying with plain WG...\n\n")
+		results = scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, profile.PublicKey, nil, nil)
+	}
 
 	if len(results) == 0 && profile.PublicKey != warpServerPubKeyB64 {
 		fmt.Printf("No endpoints with profile key, retrying with default WARP key...\n\n")
-		results = scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, warpServerPubKeyB64, nil)
+		results = scanAliveEndpoints(ips, scanPortList, profile.PrivateKey, warpServerPubKeyB64, nil, nil)
 		if len(results) > 0 {
 			fmt.Printf("Default WARP key works! Your profile's public_key differs from the standard WARP key.\n")
 			fmt.Printf("This means your region uses a different WARP server key.\n")
@@ -673,4 +719,63 @@ func udpProbeRegistered(ip string, port int, clientPrivB64, serverPubB64 string)
 		return false
 	}
 	return n >= 4
+}
+
+// udpProbeAWG sends an AmneziaWG-obfuscated WireGuard handshake initiation.
+func udpProbeAWG(ip string, port int, clientPrivB64, serverPubB64 string, awgCfg config.AWGConfig) bool {
+	rip := net.ParseIP(ip)
+	if rip == nil || rip.To4() == nil {
+		return false
+	}
+	wgInit, err := warp.BuildInitiation(clientPrivB64, serverPubB64)
+	if err != nil {
+		return false
+	}
+	pkts, err := warp.BuildAWGPackets(wgInit, awgCfg)
+	if err != nil {
+		return false
+	}
+	addr := &net.UDPAddr{IP: rip, Port: port}
+	conn, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	for _, pkt := range pkts.Junk {
+		conn.SetWriteDeadline(time.Now().Add(scanProbeTimeout))
+		if _, err := conn.Write(pkt); err != nil {
+			return false
+		}
+		time.Sleep(time.Duration(80+randInt(0, 70)) * time.Millisecond)
+	}
+	for _, pkt := range pkts.Sequence {
+		conn.SetWriteDeadline(time.Now().Add(scanProbeTimeout))
+		if _, err := conn.Write(pkt); err != nil {
+			return false
+		}
+	}
+	deadline := time.Now().Add(scanProbeTimeout)
+	for time.Now().Before(deadline) {
+		reply := make([]byte, 1500)
+		conn.SetReadDeadline(deadline)
+		n, err := conn.Read(reply)
+		if err != nil {
+			return false
+		}
+		if warp.IsValidWGResponse(reply[:n]) {
+			return true
+		}
+	}
+	return false
+}
+
+func randInt(min, max int) int {
+	if max <= min {
+		return min
+	}
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(max-min)))
+	if err != nil {
+		return min
+	}
+	return min + int(n.Int64())
 }
